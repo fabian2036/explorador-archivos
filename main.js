@@ -213,3 +213,81 @@ ipcMain.handle("select-folder", async () => {
   const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
   return result.canceled ? null : result.filePaths[0];
 });
+
+// ── Cambiar permisos (solo lectura) ──────────────────────────────────────────
+ipcMain.handle("change-permissions", async (_, itemPath, readOnly) => {
+  try {
+    const mode = readOnly ? 0o444 : 0o644;
+    fs.chmodSync(itemPath, mode);
+    return { ok: true };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+// ── Duplicar archivo/carpeta ──────────────────────────────────────────────────
+ipcMain.handle("duplicate-item", async (_, srcPath) => {
+  try {
+    const dirname = path.dirname(srcPath);
+    const basename = path.basename(srcPath);
+    const ext = path.extname(basename);
+    const name = ext.length > 0 ? basename.slice(0, -ext.length) : basename;
+    
+    let destPath = path.join(dirname, `${name} (copia)${ext}`);
+    let counter = 1;
+    
+    while (fs.existsSync(destPath)) {
+      destPath = path.join(dirname, `${name} (copia ${counter++})${ext}`);
+    }
+    
+    copyRecursive(srcPath, destPath);
+    return { ok: true, newPath: destPath };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+// ── Comprimir a ZIP ───────────────────────────────────────────────────────────
+ipcMain.handle("compress-item", async (_, itemPath) => {
+  try {
+    const archiver = require('archiver');
+    const stat = fs.statSync(itemPath);
+    const dirname = path.dirname(itemPath);
+    const basename = path.basename(itemPath);
+    const zipPath = path.join(dirname, `${basename}.zip`);
+    
+    const output = fs.createWriteStream(zipPath);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    
+    await new Promise((resolve, reject) => {
+      archive.on('error', reject);
+      output.on('error', reject);
+      output.on('finish', resolve);
+      
+      archive.pipe(output);
+      
+      if (stat.isDirectory()) {
+        archive.directory(itemPath, basename);
+      } else {
+        archive.file(itemPath, { name: basename });
+      }
+      
+      archive.finalize();
+    });
+    
+    return { ok: true, zipPath };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+// ── Extraer ZIP ──────────────────────────────────────────────────────────────
+ipcMain.handle("extract-item", async (_, zipPath, destDir) => {
+  try {
+    const extract = require('extract-zip');
+    await extract(zipPath, { dir: destDir });
+    return { ok: true };
+  } catch (err) {
+    return { error: err.message };
+  }
+});

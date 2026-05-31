@@ -60,6 +60,8 @@ export default function App() {
   const [drives, setDrives] = useState([]);
   const [specialPaths, setSpecialPaths] = useState({});
   const [error, setError] = useState(null);
+  const [showHidden, setShowHidden] = useState(false);
+  const [creatingWithExt, setCreatingWithExt] = useState(false);
 
   const mainRef = useRef(null);
   const renameRef = useRef(null);
@@ -135,6 +137,7 @@ export default function App() {
 
   // ── Entries visible ──
   const visible = [...entries]
+    .filter((e) => showHidden ? true : !e.name.startsWith("."))
     .filter((e) => search ? e.name.toLowerCase().includes(search.toLowerCase()) : true)
     .sort((a, b) => {
       if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
@@ -261,6 +264,47 @@ export default function App() {
     setCtxMenu({ x: e.clientX, y: e.clientY, path: null });
   };
 
+  // ── Seleccionar todo / Deseleccionar ──
+  const selectAll = () => setSelected(visible.map((e) => e.path));
+  const deselectAll = () => setSelected([]);
+
+  // ── Duplicar ──
+  const duplicateItems = async (paths) => {
+    for (const p of paths) {
+      const res = await api.duplicateItem(p);
+      if (res?.error) { showToast(`Error: ${res.error}`, "error"); return; }
+    }
+    showToast(`${paths.length} elemento(s) duplicado(s)`, "success");
+    navigate(currentPath, false);
+  };
+
+  // ── Cambiar permisos ──
+  const toggleReadOnly = async (itemPath, currentReadOnly) => {
+    const res = await api.changePermissions(itemPath, !currentReadOnly);
+    if (res?.error) showToast(res.error, "error");
+    else {
+      showToast(`Permisos actualizados`, "success");
+      navigate(currentPath, false);
+    }
+  };
+
+  // ── Comprimir ──
+  const compressItems = async (paths) => {
+    for (const p of paths) {
+      const res = await api.compressItem(p);
+      if (res?.error) { showToast(res.error, "error"); return; }
+    }
+    showToast(`${paths.length} elemento(s) comprimido(s)`, "success");
+    navigate(currentPath, false);
+  };
+
+  // ── Extraer ZIP ──
+  const extractZip = async (zipPath) => {
+    const res = await api.extractItem(zipPath, currentPath);
+    if (res?.error) showToast(res.error, "error");
+    else { showToast("Archivo extraído", "success"); navigate(currentPath, false); }
+  };
+
   useEffect(() => {
     const close = () => setCtxMenu(null);
     window.addEventListener("click", close);
@@ -281,10 +325,12 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && e.key === "c") copyItems("copy");
       if ((e.ctrlKey || e.metaKey) && e.key === "x") copyItems("cut");
       if ((e.ctrlKey || e.metaKey) && e.key === "v") pasteItems();
-      if ((e.ctrlKey || e.metaKey) && e.key === "a") { e.preventDefault(); setSelected(visible.map((e) => e.path)); }
-      if (e.key === "Escape") setSelected([]);
+      if ((e.ctrlKey || e.metaKey) && e.key === "a") { e.preventDefault(); selectAll(); }
+      if (e.key === "Escape") deselectAll();
       if (e.key === "Backspace") goBack();
       if (e.key === "F5") navigate(currentPath, false);
+      if ((e.ctrlKey || e.metaKey) && e.key === "d") { e.preventDefault(); selected.length && duplicateItems(selected); }
+      if ((e.ctrlKey || e.metaKey) && e.key === "h") { e.preventDefault(); setShowHidden((s) => !s); }
     };
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
@@ -353,13 +399,19 @@ export default function App() {
       {/* ACTION BAR */}
       <div style={S.actionBar}>
         <button style={S.actionBtn} onClick={() => startCreate("folder")}>＋ Carpeta</button>
-        <button style={S.actionBtn} onClick={() => startCreate("file")}>＋ Archivo</button>
+        <button style={S.actionBtn} onClick={() => setCreatingWithExt(true)}>＋ Archivo</button>
+        <div style={S.sep} />
+        <button style={S.actionBtn} onClick={selectAll} title="Ctrl+A">✔ Todo</button>
+        <button style={S.actionBtn} onClick={deselectAll} title="Esc">✕ Deseleccionar</button>
         <div style={S.sep} />
         <button style={{ ...S.actionBtn, ...S.dangerBtn }} onClick={() => selected.length && deleteItems(selected)} disabled={!selected.length}>🗑 Eliminar</button>
+        <button style={S.actionBtn} onClick={() => selected.length && duplicateItems(selected)} disabled={!selected.length} title="Ctrl+D">📋 Duplicar</button>
         <button style={S.actionBtn} onClick={() => copyItems("copy")} disabled={!selected.length}>⎘ Copiar</button>
         <button style={S.actionBtn} onClick={() => copyItems("cut")} disabled={!selected.length}>✂ Cortar</button>
         <button style={S.actionBtn} onClick={pasteItems} disabled={!clipboard}>⎙ Pegar</button>
+        <button style={S.actionBtn} onClick={() => selected.length && compressItems(selected)} disabled={!selected.length} title="Comprimir a ZIP">📦 ZIP</button>
         <div style={S.sep} />
+        <button style={{ ...S.actionBtn, ...(showHidden ? S.activeBtn : {}) }} onClick={() => setShowHidden((s) => !s)} title="Ctrl+H">👁 Ocultos</button>
         <select style={S.sortSelect} value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
           <option value="name">Nombre</option>
           <option value="modified">Modificado</option>
@@ -392,6 +444,50 @@ export default function App() {
         {/* MAIN */}
         <main ref={mainRef} style={S.main} onContextMenu={showBgCtxMenu}
           onClick={(e) => { if (e.target === mainRef.current) setSelected([]); }}>
+
+          {creatingWithExt && (
+            <div style={S.overlay}>
+              <div style={S.dialog}>
+                <p style={{ margin: "0 0 8px", fontSize: 13, color: "#a5b4fc" }}>
+                  📄 Nuevo Archivo
+                </p>
+                <input ref={createRef} style={S.createInput} value={createName} placeholder="nombre.txt"
+                  onChange={(e) => setCreateName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (!createName.trim()) return;
+                      const newPath = joinPath(currentPath, createName.trim());
+                      api.createFile(newPath).then((res) => {
+                        if (res?.error) { showToast(res.error, "error"); }
+                        else {
+                          showToast(`"${createName}" creado`, "success");
+                          navigate(currentPath, false);
+                        }
+                        setCreatingWithExt(false);
+                        setCreateName("");
+                      });
+                    }
+                    if (e.key === "Escape") { setCreatingWithExt(false); setCreateName(""); }
+                  }} />
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button style={S.confirmBtn} onClick={() => {
+                    if (!createName.trim()) return;
+                    const newPath = joinPath(currentPath, createName.trim());
+                    api.createFile(newPath).then((res) => {
+                      if (res?.error) { showToast(res.error, "error"); }
+                      else {
+                        showToast(`"${createName}" creado`, "success");
+                        navigate(currentPath, false);
+                      }
+                      setCreatingWithExt(false);
+                      setCreateName("");
+                    });
+                  }}>Crear</button>
+                  <button style={S.cancelBtn} onClick={() => { setCreatingWithExt(false); setCreateName(""); }}>Cancelar</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {creating && (
             <div style={S.overlay}>
@@ -516,13 +612,27 @@ export default function App() {
                 ["Tamaño", propData ? formatBytes(propData.size) : "…"],
                 ["Creado", propData ? new Date(propData.created).toLocaleString("es-CO") : "…"],
                 ["Modificado", propData ? new Date(propData.modified).toLocaleString("es-CO") : "…"],
-                ["Solo lectura", propData ? (propData.isReadOnly ? "Sí" : "No") : "…"],
               ].map(([label, val]) => (
                 <div key={label} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   <span style={{ opacity: 0.45, fontSize: 11 }}>{label}</span>
                   <span style={{ fontWeight: 500, fontSize: 12, wordBreak: "break-all" }}>{val}</span>
                 </div>
               ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", background: "#1a1a2e", borderRadius: 6 }}>
+                  <span style={{ fontSize: 11, opacity: 0.7 }}>
+                    {propData?.isReadOnly ? "🔒 Solo lectura" : "🔓 Editable"}
+                  </span>
+                  <button style={{ ...S.smallBtn, fontSize: 10, padding: "2px 8px" }} onClick={() => {
+                    if (properties) {
+                      toggleReadOnly(properties, propData?.isReadOnly);
+                      setPropData((p) => ({ ...p, isReadOnly: !p?.isReadOnly }));
+                    }
+                  }}>
+                    {propData?.isReadOnly ? "Permitir" : "Bloquear"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -540,14 +650,23 @@ export default function App() {
         <div style={{ ...S.ctxMenu, left: ctxMenu.x, top: ctxMenu.y }} onClick={(e) => e.stopPropagation()}>
           {ctxMenu.path && <CtxItem label="↗ Abrir" onClick={() => { const n = entries.find((e) => e.path === ctxMenu.path); if (n) openItem(n); }} />}
           {ctxMenu.path && selected.length === 1 && <CtxItem label="✏️ Renombrar (F2)" onClick={() => { const n = entries.find((e) => e.path === ctxMenu.path); if (n) startRename(n); }} />}
-          <CtxItem label="⎘ Copiar" onClick={() => copyItems("copy")} disabled={!ctxMenu.path} />
-          <CtxItem label="✂ Cortar" onClick={() => copyItems("cut")} disabled={!ctxMenu.path} />
+          <CtxItem label="⎘ Copiar" onClick={() => copyItems("copy")} disabled={!selected.length} />
+          <CtxItem label="✂ Cortar" onClick={() => copyItems("cut")} disabled={!selected.length} />
           <CtxItem label="⎙ Pegar" onClick={pasteItems} disabled={!clipboard} />
+          <CtxItem label="📋 Duplicar (Ctrl+D)" onClick={() => selected.length && duplicateItems(selected)} disabled={!selected.length} />
           <div style={S.ctxDiv} />
           <CtxItem label="＋ Nueva Carpeta" onClick={() => startCreate("folder")} />
-          <CtxItem label="＋ Nuevo Archivo" onClick={() => startCreate("file")} />
+          <CtxItem label="＋ Nuevo Archivo" onClick={() => setCreatingWithExt(true)} />
           <div style={S.ctxDiv} />
-          <CtxItem label="🗑 Eliminar (Del)" onClick={() => selected.length && deleteItems(selected)} danger disabled={!ctxMenu.path} />
+          <CtxItem label="📦 Comprimir (ZIP)" onClick={() => selected.length && compressItems(selected)} disabled={!selected.length} />
+          {ctxMenu.path && ctxMenu.path.toLowerCase().endsWith(".zip") && (
+            <CtxItem label="📂 Extraer aquí" onClick={() => extractZip(ctxMenu.path)} />
+          )}
+          <div style={S.ctxDiv} />
+          <CtxItem label="🗑 Eliminar (Del)" onClick={() => selected.length && deleteItems(selected)} danger disabled={!selected.length} />
+          {ctxMenu.path && (
+            <CtxItem label={propData?.isReadOnly ? "🔓 Permitir edición" : "🔒 Solo lectura"} onClick={() => toggleReadOnly(ctxMenu.path, propData?.isReadOnly)} />
+          )}
           <div style={S.ctxDiv} />
           <CtxItem label="ℹ️ Propiedades" onClick={() => showProperties(ctxMenu.path || currentPath)} />
         </div>
@@ -622,6 +741,7 @@ const S = {
   propPanel: { width: 220, background: "#0e0e1c", borderLeft: "1px solid #ffffff06", display: "flex", flexDirection: "column", flexShrink: 0, overflowY: "auto" },
   propHeader: { display: "flex", alignItems: "center", gap: 10, padding: "14px 14px 10px", borderBottom: "1px solid #ffffff08" },
   closeBtn: { background: "none", border: "none", color: "#6b7280", cursor: "pointer", marginLeft: "auto", fontSize: 16 },
+  smallBtn: { background: "rgba(99,102,241,0.3)", border: "1px solid rgba(99,102,241,0.5)", color: "#a5b4fc", borderRadius: 4, cursor: "pointer", transition: "all .15s" },
   statusBar: { display: "flex", alignItems: "center", gap: 16, padding: "4px 16px", background: "#0a0a12", borderTop: "1px solid #ffffff06", fontSize: 11, color: "#64748b", minHeight: 26 },
   ctxMenu: { position: "fixed", background: "#16162a", border: "1px solid #6366f130", borderRadius: 10, padding: "4px 0", zIndex: 1000, minWidth: 190, boxShadow: "0 16px 48px #000a" },
   ctxItem: { display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: "#c7d2fe", padding: "7px 16px", cursor: "pointer", fontSize: 12, transition: "background .1s" },
