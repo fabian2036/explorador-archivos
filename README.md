@@ -1,50 +1,16 @@
-# Explorador de Archivos
+# React + Vite
 
-Aplicación de escritorio web creada en React + Vite para simular un explorador de archivos con acceso rápido, vista de lista y cuadrícula, manejo de selección múltiple y operaciones básicas como crear, copiar, cortar, pegar y borrar elementos.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-## Especificaciones
+Currently, two official plugins are available:
 
-- Interfaz tipo explorador con barra de título, menú de herramientas y panel lateral.
-- Vista principal con elementos de carpeta y archivo.
-- Funcionalidades incluidas:
-  - Navegación entre carpetas
-  - Selección de uno o varios elementos
-  - Búsqueda de archivos en el directorio actual
-  - Creación de carpetas y archivos nuevos
-  - Eliminación de archivos y restauración desde papelera
-  - Copiar, cortar y pegar elementos
-  - Alternar entre vista cuadrícula y vista lista
-  - Panel de propiedades para detalles de archivos/carpetas
-  - Diseño adaptativo para ocupar toda la pantalla
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-## Estructura del proyecto
+## React Compiler
 
-- `src/App.jsx` - Componente principal de la aplicación y lógica del explorador.
-- `src/App.css` - Estilos de componentes y apariencia de la aplicación.
-- `src/index.css` - Estilos base y layout general.
-- `src/main.jsx` - Punto de entrada de React.
-- `public/` - Archivos estáticos y recursos del proyecto.
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-## Ramas de Git
+## Expanding the ESLint configuration
 
-- `main` - rama principal con el código desplegable.
-- `fabian` - rama secundaria creada según la solicitud.
-
-> Nota: todo el contenido relevante debe permanecer en `main`.
-
-## Cómo ejecutar
-
-```bash
-npm install
-npm run dev
-```
-
-Luego abre la URL que muestre Vite en tu navegador.
-
-## Repositorio remoto
-
-Remoto: `https://github.com/fabian2036/explorador-archivos.git`
-
-## Descripción breve
-
-Este proyecto es un simulador de explorador de archivos orientado a una interfaz moderna y responsiva. Está pensado como una app de práctica para comprender manejo de estado, renderizado dinámico y UI personalizada en React.
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
